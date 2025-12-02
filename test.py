@@ -1,6 +1,7 @@
 import subprocess
 import json
 import random
+import kociemba
 
 # ------------------------------
 # GLOBAL STORAGE
@@ -142,25 +143,39 @@ def assemble_kociemba_string():
 # FUNCTION: Solver Placeholder
 # ------------------------------
 def run_solver(kociemba_string):
-    """
-    Placeholder for Kociemba solver.
-    Prints input string and example moves.
-    """
-    print("Kociemba input string:", kociemba_string)
-    moves = ["R", "U'", "L2", "F"]  # Example
-    print("Solver moves:", moves)
-    return moves
 
-# ------------------------------
-# FUNCTION: Send Moves Placeholder
-# ------------------------------
-def send_to_esp32(moves_list):
     """
-    Placeholder to send moves to ESP32.
+    Solves the cube using the Kociemba algorithm.
+    Returns a list of moves.
     """
-    print("Sending moves to ESP32:", moves_list)
-    # Replace with UART code
+    try:
+        solution = kociemba.solve(kociemba_string)
+        moves = solution.split()  # Convert string to list
+        print("Kociemba input string:", kociemba_string)
+        print("Solver moves:", moves)
+        return moves
+    except Exception as e:
+        print("Error solving cube:", e)
+        return []
+# ------------------------------
+# FUNCTION: Send Moves to ESP32
+# ------------------------------
+def send_to_esp32(moves_list, port="/dev/serial0", baudrate=115200):
+    import serial
+    import time
 
+    try:
+        ser = serial.Serial(port, baudrate, timeout=1)
+        time.sleep(2)  # allow ESP32 to initialize
+
+        moves_str = " ".join(moves_list) + "\n"
+        ser.write(moves_str.encode('utf-8'))
+        print(f"Sent to ESP32: {moves_str.strip()}")
+
+        ser.close()
+
+    except serial.SerialException as e:
+        print("Error opening/writing to serial port:", e)
 # ------------------------------
 # FUNCTION: Scramble Cube
 # ------------------------------

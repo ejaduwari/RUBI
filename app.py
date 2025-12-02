@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-import test  # reuse your test.py functions
+import test  # your test.py
 
 app = Flask(__name__)
 
@@ -19,7 +19,9 @@ def capture_angle1():
     if not rgb_list:
         return jsonify({"success": False, "message": "Failed to get RGB from angle1"})
     test.save_angle1(rgb_list)
-    return jsonify({"success": True, "faces": test.angle_data})
+    # Return only angle1 faces
+    faces = {face: test.angle_data[face] for face in ["U", "L", "F"]}
+    return jsonify({"success": True, "faces": faces})
 
 # ------------------------------
 # Route: Capture angle2 (D,R,B)
@@ -30,16 +32,17 @@ def capture_angle2():
     if not rgb_list:
         return jsonify({"success": False, "message": "Failed to get RGB from angle2"})
     test.save_angle2(rgb_list)
-    return jsonify({"success": True, "faces": test.angle_data})
+    # Return only angle2 faces
+    faces = {face: test.angle_data[face] for face in ["D", "R", "B"]}
+    return jsonify({"success": True, "faces": faces})
 
 # ------------------------------
-# Route: Solve Cube (reads table edits)
+# Route: Solve Cube
 # ------------------------------
 @app.route("/solve", methods=["POST"])
 def solve_cube():
     data = request.json
     if "faces" in data:
-        # Update colors from web table edits
         for face, face_data in data["faces"].items():
             test.angle_data[face]["colors"] = face_data["colors"]
     kociemba_str = test.assemble_kociemba_string()
