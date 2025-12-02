@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RUBI Cube Control</title>
+    <style>
+        table { border-collapse: collapse; margin-bottom: 20px; }
+        td { border: 1px solid #333; padding: 5px; width: 30px; text-align: center; }
+        input { width: 30px; text-align: center; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>RUBI Cube Control</h1>
+
+    <button id="btn-angle1">Capture Angle1 (U,L,F)</button>
+    <button id="btn-angle2">Capture Angle2 (D,R,B)</button>
+    <button id="btn-solve">Solve Cube</button>
+    <button id="btn-scramble">Scramble Cube</button>
+
+    <h2>Faces Table (Editable)</h2>
+    <div id="faces"></div>
+
+    <h2>Kociemba String & Moves</h2>
+    <pre id="solution"></pre>
+
+    <script>
+        window.onload = function() {
+            // Hardcoded centers (must match test.py)
+            const centers = { 'U':'Y', 'R':'O', 'F':'G', 'D':'W', 'L':'R', 'B':'B' };
+
+            // Display faces in 3x3 tables
+            function displayFaces(faces) {
+                let html = '';
+                for (const face in faces) {
+                    html += `<h3>Face ${face}</h3><table>`;
+                    const scanned = faces[face].colors; // 8 tiles from getrgb
+                    let tileIndex = 0;
+                    for(let row=0; row<3; row++){
+                        html += '<tr>';
+                        for(let col=0; col<3; col++){
+                            if(row===1 && col===1){
+                                // Center tile (readonly)
+                                html += `<td><input value="${centers[face]}" readonly></td>`;
+                            } else {
+                                html += `<td><input value="${scanned[tileIndex]}"></td>`;
+                                tileIndex++;
+                            }
+                        }
+                        html += '</tr>';
+                    }
+                    html += '</table>';
+                }
+                document.getElementById('faces').innerHTML = html;
+            }
+
+            // Capture Angle1
+            function captureAngle1() {
+                fetch('/capture_angle1', {method:'POST'})
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) displayFaces(data.faces);
+                    else alert(data.message);
+                });
+            }
+
+            // Capture Angle2
+            function captureAngle2() {
+                fetch('/capture_angle2', {method:'POST'})
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) displayFaces(data.faces);
+                    else alert(data.message);
+                });
+            }
+
+            // Read table edits and solve cube
+            function solveCube() {
+                let faces = {};
+                const faceDivs = document.getElementById('faces').children;
+                for (let i=0; i<faceDivs.length; i++){
+                    if(faceDivs[i].tagName === "H3") {
+                        const face = faceDivs[i].textContent.split(" ")[1];
+                        faces[face] = {"colors": []};
+                        const table = faceDivs[i].nextElementSibling;
+                        const inputs = table.querySelectorAll("input");
+                        inputs.forEach(input => {
+                            if(!input.readOnly) faces[face].colors.push(input.value);
+                        });
+                    }
+                }
+
+                fetch('/solve', {
+                    method:'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({faces: faces})
+                })
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('solution').textContent =
+                        `Kociemba: ${data.kociemba}\nMoves: ${data.moves.join(' ')}`;
+                });
+            }
+
+            // Scramble
+            function scrambleCube() {
+                fetch('/scramble', {method:'POST'})
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) alert("Scramble sent!");
+                });
+            }
+
+            // Attach button event listeners
+            document.getElementById('btn-angle1').onclick = captureAngle1;
+            document.getElementById('btn-angle2').onclick = captureAngle2;
+            document.getElementById('btn-solve').onclick = solveCube;
+            document.getElementById('btn-scramble').onclick = scrambleCube;
+        }
+    </script>
+</body>
+</html>
