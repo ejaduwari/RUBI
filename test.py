@@ -1,10 +1,15 @@
-#!/usr/bin/env python3
 import subprocess
 import json
+import random
 
-# ---- CONFIG ----
-# Hardcoded centers (if needed later)
-# Example: {'U': 'Y', 'R': 'O', 'F': 'G', ...}
+# ------------------------------
+# GLOBAL STORAGE
+# ------------------------------
+# Holds scanned faces: RGB + classified colors
+# Example: {"U": {"rgb": [...], "colors": [...]}, ...}
+angle_data = {}
+
+# Hardcoded centers for each face
 centers = {
     'U': 'Y',  # Up = Yellow
     'R': 'O',  # Right = Orange
@@ -14,62 +19,56 @@ centers = {
     'B': 'B'   # Back = Blue
 }
 
-# RGB → sticker color classification
+# ------------------------------
+# FUNCTION: Classify RGB to Cube Color
+# ------------------------------
 def classify_color(r, g, b):
     """
     Classify an RGB value into a Rubik's cube sticker color:
-    W - White
-    Y - Yellow
-    R - Red
-    O - Orange
-    G - Green
-    B - Blue
+    W - White, Y - Yellow, R - Red, O - Orange, G - Green, B - Blue
     """
-
-    # ----- Red vs Orange -----
-    # Both have high R, low G/B; orange has more green relative to blue
+    # Red vs Orange
     if r > 200 and g < 150 and b < 150:
         gb_delta = g - b
-        if gb_delta > 10:  # orange only if significantly more green than blue
-            return 'O'
-        else:
-            return 'R'
+        return 'O' if gb_delta > 10 else 'R'
 
-    # ----- White vs Yellow -----
-    # Both have high R and G; B is lower in yellow
+    # White vs Yellow
     if r >= 175 and g >= 175:
         gb_delta = g - b
-        if b < 100 and gb_delta > 60:
-            return 'Y'  # Yellow
-        else:
-            return 'W'  # White
+        return 'Y' if b < 100 and gb_delta > 60 else 'W'
 
-    # ----- Green vs Blue -----
-    # Low R, G and B may be close due to noise; classify based on gb_delta
+    # Green vs Blue
     if r < 200:
         gb_delta = g - b
         if gb_delta > 0:
-            return 'G'  # Green
+            return 'G'
         elif gb_delta < 0:
-            return 'B'  # Blue
+            return 'B'
         else:
-            # If G and B are very close, pick the larger
-            if g >= b:
-                return 'G'
-            else:
-                return 'B'
+            return 'G' if g >= b else 'B'
 
-    # ----- Catch-all for errors -----
-    return '?'  # Should only appear for unexpected RGB values
+    # Catch-all
+    return '?'
 
-# Call the C++ executable to get RGB values for a given angle
+# ------------------------------
+# FUNCTION: Call C++ Executable
+# ------------------------------
 def get_rgb_from_cpp(angle):
+    """
+    Calls the C++ RGB program for a given angle.
+    Returns a list of 8 or 24 RGB dicts depending on angle.
+    """
     try:
-        result = subprocess.run(['sudo', './getrgb', angle], capture_output=True, text=True, check=True)
-        # Last line should be JSON
+        result = subprocess.run(
+            ['sudo', './getrgb', angle],
+            capture_output=True,
+            text=True,
+            check=True
+        )
         lines = result.stdout.strip().splitlines()
         json_line = lines[-1]
         return json.loads(json_line)
+
     except subprocess.CalledProcessError as e:
         print("Error running getrgb:", e)
         print("Stdout:", e.stdout)
@@ -80,32 +79,124 @@ def get_rgb_from_cpp(angle):
         print("Raw output:", result.stdout)
         return None
 
-# ---- MAIN ----
-def main():
-    print("==== RUBI RGB CLASSIFIER ====")
-    angle = input("\nEnter angle name to scan (example: angle1): ").strip()
+# ------------------------------
+# FUNCTION: Save Faces From Angle1
+# ------------------------------
+def save_angle1(rgb_list_24):
+    """
+    angle1 captures 3 faces: U, L, F
+    Splits 24 RGB values into three faces of 8 tiles each
+    """
+    faces = ["U", "L", "F"]
+    for i, face in enumerate(faces):
+        tiles_8 = rgb_list_24[i*8 : (i+1)*8]
+        colors = [classify_color(t['r'], t['g'], t['b']) for t in tiles_8]
+        angle_data[face] = {"rgb": tiles_8, "colors": colors}
+        print(f"Saved face {face} with colors:", colors)
 
-    print("\nRunning getrgb...\n")
-    rgb_list = get_rgb_from_cpp(angle)
-    if not rgb_list:
-        print("Failed to get RGB data. Exiting.")
-        return
+# ------------------------------
+# FUNCTION: Save Faces From Angle2
+# ------------------------------
+def save_angle2(rgb_list_24):
+    """
+    angle2 captures 3 faces: D, R, B
+    Splits 24 RGB values into three faces of 8 tiles each
+    """
+    faces = ["D", "R", "B"]
+    for i, face in enumerate(faces):
+        tiles_8 = rgb_list_24[i*8 : (i+1)*8]
+        colors = [classify_color(t['r'], t['g'], t['b']) for t in tiles_8]
+        angle_data[face] = {"rgb": tiles_8, "colors": colors}
+        print(f"Saved face {face} with colors:", colors)
 
-    print(f"Received {len(rgb_list)} RGB values.\n")
+# ------------------------------
+# FUNCTION: Build Face String
+# ------------------------------
+def build_face_string(face_letter, tiles_8):
+    """
+    Inserts hardcoded center in the middle of 8-tile list to create 9-tile face string.
+    """
+    center = centers[face_letter]
+    face_string = tiles_8[:4] + [center] + tiles_8[4:]
+    return "".join(face_string)
 
-    # Classify each tile
-    classified_tiles = [classify_color(t['r'], t['g'], t['b']) for t in rgb_list]
+# ------------------------------
+# FUNCTION: Assemble Kociemba String
+# ------------------------------
+def assemble_kociemba_string():
+    """
+    Combines all 6 faces into the 54-character Kociemba string.
+    Order: U R F D L B
+    """
+    kociemba_str = ""
+    for face in ['U','R','F','D','L','B']:
+        if face not in angle_data:
+            print(f"Warning: Face {face} not scanned")
+            continue
+        tiles_8 = angle_data[face]["colors"]
+        face_str = build_face_string(face, tiles_8)
+        kociemba_str += face_str
+    return kociemba_str
 
-    # Print classified colors
-    print("Classified tiles (24):")
-    print(classified_tiles)
+# ------------------------------
+# FUNCTION: Solver Placeholder
+# ------------------------------
+def run_solver(kociemba_string):
+    """
+    Placeholder for Kociemba solver.
+    Prints input string and example moves.
+    """
+    print("Kociemba input string:", kociemba_string)
+    moves = ["R", "U'", "L2", "F"]  # Example
+    print("Solver moves:", moves)
+    return moves
 
-    # Pre-Kociemba string (just concatenating colors in order)
-    cube_string = ''.join(classified_tiles)
-    print("\n=== PARTIAL CUBE STRING (24 tiles) ===")
-    print(cube_string)
-    print("\nNote: This is NOT the final 54-tile string. Additional angles will fill the rest.\n")
+# ------------------------------
+# FUNCTION: Send Moves Placeholder
+# ------------------------------
+def send_to_esp32(moves_list):
+    """
+    Placeholder to send moves to ESP32.
+    """
+    print("Sending moves to ESP32:", moves_list)
+    # Replace with UART code
 
+# ------------------------------
+# FUNCTION: Scramble Cube
+# ------------------------------
+def scramble_cube(num_moves=20):
+    """
+    Generates a random scramble sequence and sends to ESP32.
+    """
+    moves_options = ["R", "R'", "R2", "L", "L'", "L2",
+                     "U", "U'", "U2", "D", "D'", "D2",
+                     "F", "F'", "F2", "B", "B'", "B2"]
+    scramble = [random.choice(moves_options) for _ in range(num_moves)]
+    print("Scramble sequence:", scramble)
+    send_to_esp32(scramble)
+
+# ------------------------------
+# MAIN BLOCK
+# ------------------------------
 if __name__ == "__main__":
-    main()
+    print("==== RUBI RGB CLASSIFIER ====")
 
+    # Scan angle1 → U, L, F
+    rgb_angle1 = get_rgb_from_cpp("angle1")
+    if rgb_angle1:
+        save_angle1(rgb_angle1)
+
+    # Scan angle2 → D, R, B
+    rgb_angle2 = get_rgb_from_cpp("angle2")
+    if rgb_angle2:
+        save_angle2(rgb_angle2)
+
+    # Assemble full 54-character string
+    k_str = assemble_kociemba_string()
+    moves = run_solver(k_str)
+    send_to_esp32(moves)
+
+    # Optionally scramble
+    scramble_input = input("\nDo you want to scramble the cube? (y/n): ").strip().lower()
+    if scramble_input == 'y':
+        scramble_cube()
