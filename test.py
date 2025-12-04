@@ -142,21 +142,40 @@ def assemble_kociemba_string():
 # ------------------------------
 # FUNCTION: Solver Placeholder
 # ------------------------------
-def run_solver(kociemba_string):
-
+def run_solver(color_string):
     """
     Solves the cube using the Kociemba algorithm.
+    Accepts a color-letter string (W,R,Y,O,B,G) and maps it to face letters.
     Returns a list of moves.
     """
+    # Define color → face mapping
+    color_to_face = {
+        "W": "D",  # White → Down
+        "R": "L",  # Red → Left
+        "Y": "U",  # Yellow → Up
+        "O": "R",  # Orange → Right
+        "B": "B",  # Blue → Back
+        "G": "F"   # Green → Front
+    }
+
+    # Map the color string to face letters
+    face_string = "".join(color_to_face.get(c, c) for c in color_string)
+
     try:
-        solution = kociemba.solve(kociemba_string)
+        # Solve cube using the mapped face string
+        solution = kociemba.solve(face_string)
         moves = solution.split()  # Convert string to list
-        print("Kociemba input string:", kociemba_string)
-        print("Solver moves:", moves)
+
+        # Print debug info
+        print("Original color string: ", color_string)
+        print("Mapped face string:    ", face_string)
+        print("Solver moves:          ", moves)
+
         return moves
     except Exception as e:
         print("Error solving cube:", e)
         return []
+
 # ------------------------------
 # FUNCTION: Send Moves to ESP32
 # ------------------------------
